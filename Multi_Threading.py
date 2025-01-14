@@ -248,8 +248,6 @@ def Scrapping_Data_For_Each_URL(shared_id, index, url, Depart_Arpt_code, Arrv_Ar
 
                 if not success:
                     print(f"Using fallback date: {current_Date} for iteration {i + 1}")
-                    i-=1
-                    continue
                 else:
                     print(f"Extracted new date: {current_Date}")
             
@@ -318,9 +316,9 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")        
     #csv_fileName=f"flight_prices_{timestamp}.csv"
     #Save_data_To_CSV(all_prices, csv_fileName)
-    excel_filename = f"flight_prices_{timestamp}.xlsx"
-    Save_data_To_Excel(all_prices, excel_filename)
-    print(f"All data saved to {excel_filename}\n")
+    # excel_filename = f"flight_prices_{timestamp}.xlsx"
+    # Save_data_To_Excel(all_prices, excel_filename)
+    # print(f"All data saved to {excel_filename}\n")
     
     # Print failed zones
     if failed_zones:
