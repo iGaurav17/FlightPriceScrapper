@@ -185,6 +185,8 @@ def insert_into_flight_availability(config, cursor, *data):
         cursor.connection.commit()
         print(f"Data inserted successfully")
         release_connection(connection, cursor)
+        return True
     except Exception as e:
         print(f"Error inserting data: {e}")
         release_connection(connection, cursor)
+        return False
