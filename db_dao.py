@@ -10,10 +10,12 @@
 #   Changes (from 07-Jan-2025)
 #   ####################################################################
   
-#   07-Jan-2025 Gaurav Bhardwaj   : Bug 30535 - Google Flight Price Scrapper
-                                    # db_dao.py - Data Access Object for database operations
+#   05-Feb-2025 Gaurav Bhardwaj   : Bug 30535 - Google Flight Price Scrapper
+                                    # Add new functions to fetch Airline Name
+                                    # Add new functions to fetch zone_list and calculate average fare respective to zones
 import oracledb
 from db_Properties import DB_CONFIG
+import pandas as pd
 
 def connect_to_db(config):
     try:
@@ -23,7 +25,6 @@ def connect_to_db(config):
     except Exception as e:
         print(f"Error connecting to the database: {e}")
         raise
-
 
 def release_connection(connection, cursor):
 
@@ -62,7 +63,6 @@ def fetch_max_id(config, cursor):
     except Exception as e:
         print(f"Error fetching max ID: {e}")
         return 0
-
 
 def fetch_cabin_id(config,cursor, cabin):
     try:
@@ -132,24 +132,22 @@ def fetch_zone_id(config, cursor, Depart_Arpt_code, arrv_arpt_code):
         print(f"Error fetching zone ID for departure {Depart_Arpt_code} and arrival {arrv_arpt_code}: {e}")
         return None
 
-def fetch_airline_name(config, cursor, Airline_id):
+def fetch_airline_name(Airline_id):
     """
     Fetch the airline name from the database for a given airline ID.
 
     """
     try:
-        connection, cursor = connect_to_db(config)
+        connection, cursor = connect_to_db(DB_CONFIG)
         
         cursor.execute("SELECT Name FROM Airline WHERE ID = :id", {"id": Airline_id})
-        airline_name = cursor.fetchone()[0] if cursor.fetchone() else None
+        row = cursor.fetchone()
+        airline_name = row[0] if row else None
         release_connection(connection, cursor)
         return airline_name
     except Exception as e:
         print(f"Error fetching airline name: {e}")
         raise e
-
-
-
 
 def insert_into_flight_availability(config, cursor, *data):
     """        
@@ -158,6 +156,14 @@ def insert_into_flight_availability(config, cursor, *data):
     Args:
         cursor: Database cursor.
         data: Tuple containing the row values to insert.
+    """
+    check_query = """
+    SELECT COUNT(*)
+    FROM Flight_Availability
+    WHERE Dept_DateTime = TO_DATE(:1, 'YYYY-MM-DD HH24:MI:SS')
+      AND Dept_Arpt_ID = :2
+      AND Arrv_Arpt_ID = :3
+      AND CABIN_ID = :4
     """
     query = """
     INSERT INTO Flight_Availability (
@@ -179,12 +185,98 @@ def insert_into_flight_availability(config, cursor, *data):
         :35, :36, :37, :38, :39,
         :40, :41, :42, :43, :44, :45 , :46   )
     """
+        
     try:
         connection, cursor = connect_to_db(config)
+        # Check for existing Dept_DateTime
+        try:
+            cursor.execute(check_query, [data[6], data[2], data[3], data[45]])  # Index 6 is the position of Dept_DateTime in the data tuple
+            print("Check query executing successfully")
+        except Exception as e:
+            print(f"Error executing check query: {e}")
+            release_connection(connection, cursor)
+            return False
+        
+        result = cursor.fetchone()
+        if result[0] > 0:
+            print(f"Record with Dept_DateTime {data[6]} already exists. Skipping insertion.")
+            release_connection(connection, cursor)
+            return False
         cursor.execute(query, data)
         cursor.connection.commit()
         print(f"Data inserted successfully")
         release_connection(connection, cursor)
+        return True
     except Exception as e:
         print(f"Error inserting data: {e}")
         release_connection(connection, cursor)
+        return False
+    
+    
+def fetch_zone_list(Airline_ID, min_stops, max_stops):
+    connection, cursor = connect_to_db(DB_CONFIG)
+    try:
+        query= """
+            SELECT ZA.Depart_Airport_Set, ZA.Arrive_Airport_Set
+            FROM Zone_Airport ZA, Zone Z, Zone_Cabin ZC
+            WHERE ZA.Zone_ID = ZC.Zone_ID 
+            AND ZA.Airline_ID = :1
+            AND ZC.Cabin_ID = 1 AND ZC.is_Valid = 1
+            AND Z.Id = ZA.Zone_ID
+            AND ZA.Min_Stops = :2
+            AND ZA.Max_Stops = :3
+            AND Z.Zone_Category_ID IN (1, 2)
+            AND Z.Id NOT IN (
+                SELECT Zone_ID 
+                FROM Flight_Availability 
+                GROUP BY Zone_ID 
+                HAVING COUNT(ID) > 1000
+            )
+        """
+        cursor.execute(query, (Airline_ID, min_stops, max_stops))
+        rows = cursor.fetchall()
+        for row in rows:
+            print(row)
+        return rows
+    except Exception as e:
+        print(f"Error fetching zone list: {e}")
+        raise
+    finally:
+        release_connection(connection, cursor)
+    
+
+
+def export_avg_fare_to_excel(output_file, Airline_id):
+    """
+    Fetch the average fare for each unique (airline_id, dept_arpt_id, arrv_arpt_id, cabin_id)
+    and export it to an Excel file.
+    
+    Args:
+        config: Database connection config.
+        output_file (str): Name of the output Excel file.
+    """
+    query = """
+    SELECT 
+        Airline_ID, Dept_Arpt_ID, Arrv_Arpt_ID, Cabin_ID, 
+        ROUND(AVG(Fare), 2) AS Avg_Fare
+    FROM Flight_Availability
+    WHERE Fare > 50 AND Fare < 18000 AND Airline_ID = :1
+    GROUP BY Airline_ID, Dept_Arpt_ID, Arrv_Arpt_ID, Cabin_ID
+    ORDER BY Airline_ID, Dept_Arpt_ID, Arrv_Arpt_ID, Cabin_ID
+    """
+    connection, cursor = connect_to_db(DB_CONFIG)
+    try:
+        cursor.execute(query,(Airline_id,))
+        rows = cursor.fetchall()
+        if rows:
+            df = pd.DataFrame(rows, columns=['Airline_ID', 'Dept_Arpt_ID', 'Arrv_Arpt_ID', 'Cabin_ID', 'Avg_Fare'])
+            df.to_excel(output_file, index=False)
+            print(f"Excel file saved: {output_file}")
+        else:
+            print("No data found to export.")
+    except Exception as e:
+        print(f"Error fetching and exporting average fares: {e}")
+    finally:
+        release_connection(connection, cursor)
+    
+    

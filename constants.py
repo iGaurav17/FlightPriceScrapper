@@ -10,10 +10,12 @@
 #   Changes (from 07-Jan-2025)
 #   ####################################################################
   
-#   07-Jan-2025 Gaurav Bhardwaj   : Bug 30535 - Google Flight Price Scrapper
-                                    # constants.py-Stores all the constants related to the project
+#   05-Feb-2025 Gaurav Bhardwaj   : Bug 30535 - Google Flight Price Scrapper
+                                    # Added new constants for Auto_url file
+                                    # Removed Airline_Name constant
 
 from datetime import date, datetime
+from db_dao import fetch_airline_name
 
 def format_date_for_oracle(dt):
     """Convert datetime/date objects to Oracle-compatible format."""
@@ -21,12 +23,21 @@ def format_date_for_oracle(dt):
         dt = datetime.combine(dt, datetime.min.time())
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
-days=285      #No of days for which data is to be scrapped
-Concurrent_urls=4          #No of concurrent urls to be scrapped
+days=350     #No of days for which data is to be scrapped
+Concurrent_urls=5          #No of concurrent urls to be scrapped
 
 # Airline-related constants
-Airline_id = 150
-Airline_Name ="Gulf Air"
+Airline_id = 148
+
+urls_file = 'urls_to_parse.csv'
+
+min_stops=0               # Mark it zero for nonstop zones.
+max_stops=0               # Mark it zero for nonstop zones.
+url_results = []    # Lists to store results 
+failed_zones = []  # Lists to store failed attempts
+
+dept_date="Nov 6"
+arrv_date ="Nov 23"
 
 # Default values (can be updated dynamically)
 Depart_Arpt_ID = ""
@@ -51,7 +62,7 @@ Stops3 = 0
 Stops4 = 0
 
 # Operating airlines
-Operating_Airline1 = "Gulf Air"
+Operating_Airline1 =fetch_airline_name(Airline_id)
 Operating_Airline2 = ""
 Operating_Airline3 = ""
 Operating_Airline4 = ""
@@ -81,7 +92,7 @@ Executive_Fare2 = 0
 
 #new columns in flight_availability table
 currency_id = 1                # 1 for usd
-zone_id = 1                   
+zone_id = 15090136             
 cabin_id=1
 
 
